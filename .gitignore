@@ -1,0 +1,10 @@
+serviceAccountKey.json
+.venv/
+venv/
+__pycache__/
+*.pyc
+static/uploads/*
+!static/uploads/.gitkeep
+static/invoices/*
+!static/invoices/.gitkeep
+.env

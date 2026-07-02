@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Smart Salon & Parlour - Home{% endblock %}
+{% block content %}
+
+<section class="hero-section">
+  <div class="container">
+    <div class="row align-items-center gy-4">
+      <div class="col-lg-7">
+        <p class="eyebrow"><i class="fa-solid fa-scissors"></i> SMART SALON &amp; PARLOUR</p>
+        <h1 class="hero-title">Welcome Customer</h1>
+        <p class="hero-subtitle">
+          Book your favourite hair, skin, makeup and spa services in seconds.
+          Choose your stylist, pick a slot, and let us pamper you.
+        </p>
+        <a href="{{ url_for('login') }}" class="btn btn-gold btn-lg rounded-pill px-5 mt-3 start-btn">
+          Start <i class="fa-solid fa-arrow-right ms-2"></i>
+        </a>
+      </div>
+      <div class="col-lg-5">
+        <div class="rating-card shadow-lg">
+          <p class="rating-label">Overall Customer Rating</p>
+          <div class="rating-value">
+            {{ avg_rating if avg_rating else "0.0" }} <span class="rating-max">/ 5</span>
+          </div>
+          <div class="stars">
+            {% for i in range(1,6) %}
+              {% if i <= (avg_rating|round(0,'floor')) %}
+                <i class="fa-solid fa-star"></i>
+              {% else %}
+                <i class="fa-regular fa-star"></i>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <p class="rating-count">based on {{ total_reviews }} review{{ 's' if total_reviews != 1 else '' }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="container py-5">
+  <h2 class="section-title text-center mb-4">What Our Customers Say</h2>
+  {% if recent_reviews %}
+  <div class="row g-4">
+    {% for r in recent_reviews %}
+    <div class="col-md-4">
+      <div class="review-card h-100">
+        <div class="stars small mb-2">
+          {% for i in range(1,6) %}
+            {% if i <= r['rating'] %}<i class="fa-solid fa-star"></i>{% else %}<i class="fa-regular fa-star"></i>{% endif %}
+          {% endfor %}
+        </div>
+        <p class="review-text">"{{ r['feedback'] if r['feedback'] else 'Great service!' }}"</p>
+        <p class="review-author mb-0">- {{ r['customer_name'] }} <span class="text-muted">for {{ r['staff_name'] }}</span></p>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-center text-muted">No reviews yet. Be the first to book and share your experience!</p>
+  {% endif %}
+</section>
+
+<section class="container pb-5">
+  <h2 class="section-title text-center mb-4">Our Services</h2>
+  <div class="row g-3">
+    <div class="col-6 col-md-4 col-lg-2"><div class="service-tile"><i class="fa-solid fa-scissors"></i><p>Hair Care</p></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="service-tile"><i class="fa-solid fa-spa"></i><p>Skin Care</p></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="service-tile"><i class="fa-solid fa-paintbrush"></i><p>Makeup</p></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="service-tile"><i class="fa-solid fa-hand-sparkles"></i><p>Hand &amp; Foot</p></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="service-tile"><i class="fa-solid fa-wind"></i><p>Hair Removal</p></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="service-tile"><i class="fa-solid fa-hot-tub-person"></i><p>Spa</p></div></div>
+  </div>
+</section>
+
+{% endblock %}

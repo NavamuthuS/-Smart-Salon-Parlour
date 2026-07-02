@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Reviews{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <h1 class="dashboard-welcome"><i class="fa-solid fa-star"></i> Customer Reviews</h1>
+    <p class="text-muted mb-4">Only visible to admin.</p>
+
+    {% if reviews %}
+    <div class="row g-4">
+      {% for r in reviews %}
+      <div class="col-md-6 col-lg-4">
+        <div class="review-card h-100">
+          <div class="d-flex justify-content-between">
+            <strong>{{ r['customer_name'] }}</strong>
+            <span class="text-muted">→ {{ r['staff_name'] }}</span>
+          </div>
+          <div class="stars small my-2">
+            {% for i in range(1,6) %}
+              {% if i <= r['rating'] %}<i class="fa-solid fa-star"></i>{% else %}<i class="fa-regular fa-star"></i>{% endif %}
+            {% endfor %}
+          </div>
+          <p class="review-text mb-0">{{ r['feedback'] if r['feedback'] else 'No feedback text.' }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted">No reviews submitted yet.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

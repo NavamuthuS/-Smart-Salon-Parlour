@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Login - Smart Salon & Parlour{% endblock %}
+{% block content %}
+<section class="auth-section">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <div class="auth-card shadow-lg">
+          <div class="text-center mb-4">
+            <i class="fa-solid fa-spa auth-icon"></i>
+            <h2 class="auth-title">Login</h2>
+            <p class="text-muted">Your role is detected automatically.</p>
+          </div>
+          <form method="POST">
+            <div class="mb-3">
+              <label class="form-label">Email ID</label>
+              <input type="email" name="email" class="form-control" placeholder="you@example.com" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Password</label>
+              <input type="password" name="password" class="form-control" placeholder="Enter password" required>
+            </div>
+            <div class="text-end mb-4">
+              <a href="{{ url_for('forgot_password') }}" class="link-plum small">Forgot Password?</a>
+            </div>
+            <button type="submit" class="btn btn-gold w-100 rounded-pill py-2">
+              <i class="fa-solid fa-right-to-bracket me-2"></i>Login
+            </button>
+          </form>
+          <p class="text-center mt-4 mb-0">
+            Don't have an account? <a href="{{ url_for('register') }}" class="link-plum">Register here</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

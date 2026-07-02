@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}New Booking{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <h1 class="dashboard-welcome"><i class="fa-solid fa-calendar-check"></i> New Booking</h1>
+    <p class="text-muted mb-4">Select one or more services, pick your favourite stylist and slot.</p>
+
+    <form method="POST" enctype="multipart/form-data" class="booking-form">
+
+      {% for category, items in services.items() %}
+      <div class="service-category-card mb-3">
+        <h5 class="category-title">
+          {% if category == "Hair Care" %}<i class="fa-solid fa-scissors"></i>
+          {% elif category == "Skin Care" %}<i class="fa-solid fa-spa"></i>
+          {% elif category == "Makeup" %}<i class="fa-solid fa-paintbrush"></i>
+          {% elif category == "Hand & Foot" %}<i class="fa-solid fa-hand-sparkles"></i>
+          {% elif category == "Hair Removal" %}<i class="fa-solid fa-wind"></i>
+          {% elif category == "Spa" %}<i class="fa-solid fa-hot-tub-person"></i>
+          {% endif %}
+          {{ category }}
+        </h5>
+        <div class="row">
+          {% for name, price_range, calc_price in items %}
+          <div class="col-sm-6 col-lg-4 mb-2">
+            <label class="service-check">
+              <input type="checkbox" name="services" value="{{ name }} (₹{{ price_range }})" data-price="{{ calc_price }}" class="price-checkbox">
+              <span class="service-check-box">
+                <span class="service-name">{{ name }}</span>
+                <span class="service-price">₹{{ price_range }}</span>
+              </span>
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+
+      <div class="total-price-bar mb-3">
+        <span>Estimated Total</span>
+        <span id="totalPriceDisplay">₹0</span>
+      </div>
+
+      <div class="service-category-card mb-3">
+        <h5 class="category-title"><i class="fa-solid fa-user-tie"></i> Booking Details</h5>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Select Staff (Hair Cutter)</label>
+            <select name="staff_name" class="form-select" required>
+              <option value="" disabled selected>Choose a staff member</option>
+              {% for s in staff_names %}
+              <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Select Seat</label>
+            <select name="seat" class="form-select" required>
+              <option value="" disabled selected>Choose seat</option>
+              <option value="1">Seat 1</option>
+              <option value="2">Seat 2</option>
+              <option value="3">Seat 3</option>
+              <option value="4">Seat 4</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Select Date</label>
+            <input type="date" name="date" class="form-control" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Select Time</label>
+            <input type="time" name="time" class="form-control" required>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Upload Reference Image (optional)</label>
+            <input type="file" name="image" class="form-control" accept="image/*">
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-gold btn-lg rounded-pill px-5 w-100">
+        <i class="fa-solid fa-check-circle me-2"></i>Confirm Booking
+      </button>
+    </form>
+  </div>
+</section>
+{% endblock %}

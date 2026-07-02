@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Customer Dashboard{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <h1 class="dashboard-welcome">Welcome, {{ username }} <i class="fa-solid fa-hand-sparkles"></i></h1>
+    <p class="text-muted mb-5">What would you like to do today?</p>
+
+    <div class="row g-4">
+      <div class="col-md-4">
+        <a href="{{ url_for('booking') }}" class="option-card d-block">
+          <i class="fa-solid fa-calendar-check option-icon"></i>
+          <h3>New Booking</h3>
+          <p>Choose services, a stylist, date, time and seat.</p>
+        </a>
+      </div>
+      <div class="col-md-4">
+        <a href="{{ url_for('review') }}" class="option-card d-block">
+          <i class="fa-solid fa-star option-icon"></i>
+          <h3>Rating &amp; Review</h3>
+          <p>Rate your stylist and share your experience.</p>
+        </a>
+      </div>
+      <div class="col-md-4">
+        <a href="{{ url_for('profile') }}" class="option-card d-block">
+          <i class="fa-solid fa-user option-icon"></i>
+          <h3>My Profile</h3>
+          <p>View booking history and edit your details.</p>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% if last_booking %}
+<script>
+  // Injected only right after a successful booking — triggers the EmailJS
+  // notification to the chosen staff member (see static/js/script.js).
+  window.LAST_BOOKING = {
+    staff_name: {{ last_booking.staff_name|tojson }},
+    staff_email: {{ last_booking.staff_email|tojson }},
+    customer_name: {{ last_booking.customer_name|tojson }},
+    services: {{ last_booking.services|tojson }},
+    date: {{ last_booking.date|tojson }},
+    time: {{ last_booking.time|tojson }},
+    seat: {{ last_booking.seat|tojson }}
+  };
+</script>
+{% endif %}
+{% endblock %}

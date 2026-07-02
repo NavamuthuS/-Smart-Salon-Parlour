@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Rating & Review{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-7">
+        <h1 class="dashboard-welcome"><i class="fa-solid fa-star"></i> Rating &amp; Review</h1>
+        <p class="text-muted mb-4">Tell us how your stylist did.</p>
+
+        <form method="POST" class="auth-card shadow-lg">
+          <div class="mb-3">
+            <label class="form-label">Select Staff</label>
+            <select name="staff_name" class="form-select" required>
+              <option value="" disabled selected>Choose staff member</option>
+              {% for s in staff_names %}
+              <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label d-block">Star Rating</label>
+            <div class="star-rating">
+              {% for i in range(5,0,-1) %}
+              <input type="radio" id="star{{ i }}" name="rating" value="{{ i }}" {% if i==5 %}required{% endif %}>
+              <label for="star{{ i }}"><i class="fa-solid fa-star"></i></label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label">Feedback</label>
+            <textarea name="feedback" class="form-control" rows="4" placeholder="Share your experience..."></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-gold w-100 rounded-pill py-2">
+            <i class="fa-solid fa-paper-plane me-2"></i>Submit
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <h1 class="dashboard-welcome"><i class="fa-solid fa-user-shield"></i> Admin Dashboard</h1>
+    <p class="text-muted mb-4">Overview of your salon.</p>
+
+    <div class="row g-4 mb-4">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <i class="fa-solid fa-calendar-check"></i>
+          <h2>{{ total_bookings }}</h2>
+          <p>Total Bookings</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <i class="fa-solid fa-users"></i>
+          <h2>{{ total_customers }}</h2>
+          <p>Registered Customers</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <i class="fa-solid fa-indian-rupee-sign"></i>
+          <h2>₹{{ revenue_this_month }}</h2>
+          <p>Revenue This Month</p>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <a href="{{ url_for('reviews_page') }}" class="stat-card stat-card-link d-block">
+          <i class="fa-solid fa-star"></i>
+          <h2>View</h2>
+          <p>Reviews</p>
+        </a>
+      </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+      <div class="col-12">
+        <div class="stat-card text-start">
+          <h5 class="mb-3" style="color:var(--plum);">Bookings Per Day (last 7 days)</h5>
+          <canvas id="bookingsChart" height="90"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <h4 class="section-title mb-3">Recent Bookings</h4>
+
+    <div class="filter-bar mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Search Customer</label>
+          <input type="text" id="filterCustomer" class="form-control form-control-sm" placeholder="Customer name...">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Filter by Date</label>
+          <input type="date" id="filterDate" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Filter by Status</label>
+          <select id="filterStatus" class="form-select form-select-sm">
+            <option value="">All</option>
+            <option value="Pending">Pending</option>
+            <option value="Completed">Completed</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {% if recent_bookings %}
+    <div class="table-responsive">
+      <table class="table admin-table align-middle">
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Services</th>
+            <th>Staff</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Seat</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="bookingsTableBody">
+          {% for b in recent_bookings %}
+          <tr class="booking-row"
+              data-customer="{{ b['customer_name']|lower }}"
+              data-date="{{ b['date'] }}"
+              data-status="{{ b['status'] }}">
+            <td>{{ b['customer_name'] }}</td>
+            <td>{{ b['services'] }}</td>
+            <td>{{ b['staff_name'] }}</td>
+            <td>{{ b['date'] }}</td>
+            <td>{{ b['time'] }}</td>
+            <td>{{ b['seat'] }}</td>
+            <td><span class="status-badge status-{{ b['status']|lower }}">{{ b['status'] }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted">No bookings yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // ---- Bookings per day chart ----
+    var ctx = document.getElementById("bookingsChart");
+    if (ctx) {
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: {{ chart_labels|tojson }},
+          datasets: [{
+            label: "Bookings",
+            data: {{ chart_values|tojson }},
+            backgroundColor: "#C9962F",
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+        }
+      });
+    }
+
+    // ---- Search / filter for recent bookings table ----
+    var customerInput = document.getElementById("filterCustomer");
+    var dateInput = document.getElementById("filterDate");
+    var statusSelect = document.getElementById("filterStatus");
+    var rows = document.querySelectorAll(".booking-row");
+
+    function applyFilters() {
+      var customerVal = (customerInput.value || "").toLowerCase();
+      var dateVal = dateInput.value || "";
+      var statusVal = statusSelect.value || "";
+
+      rows.forEach(function (row) {
+        var matchesCustomer = row.dataset.customer.includes(customerVal);
+        var matchesDate = !dateVal || row.dataset.date === dateVal;
+        var matchesStatus = !statusVal || row.dataset.status === statusVal;
+        row.style.display = (matchesCustomer && matchesDate && matchesStatus) ? "" : "none";
+      });
+    }
+
+    if (customerInput) customerInput.addEventListener("input", applyFilters);
+    if (dateInput) dateInput.addEventListener("change", applyFilters);
+    if (statusSelect) statusSelect.addEventListener("change", applyFilters);
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Invoice - {{ b.booking_code }}{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-lg-7">
+        <div class="invoice-card shadow-lg">
+          <div class="text-center mb-4">
+            <i class="fa-solid fa-circle-check invoice-success-icon"></i>
+            <h2 class="auth-title mb-1">Booking Confirmed!</h2>
+            <p class="text-muted">Booking ID: <strong>{{ b.booking_code }}</strong></p>
+          </div>
+
+          <table class="table invoice-table">
+            <tr><th>Customer</th><td>{{ b.customer_name }}</td></tr>
+            <tr><th>Staff</th><td>{{ b.staff_name }}</td></tr>
+            <tr><th>Date</th><td>{{ b.date }}</td></tr>
+            <tr><th>Time</th><td>{{ b.time }}</td></tr>
+            <tr><th>Seat</th><td>{{ b.seat }}</td></tr>
+          </table>
+
+          <h5 class="mt-4 mb-2" style="color:var(--plum);">Services</h5>
+          <table class="table invoice-table">
+            <thead>
+              <tr><th>Service</th><th class="text-end">Price</th></tr>
+            </thead>
+            <tbody>
+              {% for item in b.service_items %}
+              <tr>
+                <td>{{ item.name }}</td>
+                <td class="text-end">₹{{ item.price }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th>Total</th>
+                <th class="text-end">₹{{ b.total_price }}</th>
+              </tr>
+            </tfoot>
+          </table>
+
+          <a href="{{ url_for('invoice_pdf', booking_code=b.booking_code) }}" class="btn btn-gold w-100 rounded-pill py-2 mt-3">
+            <i class="fa-solid fa-file-pdf me-2"></i>Download Invoice as PDF
+          </a>
+          <a href="{{ url_for('customer_dashboard') }}" class="btn btn-plum w-100 rounded-pill py-2 mt-2">
+            Back to Dashboard
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

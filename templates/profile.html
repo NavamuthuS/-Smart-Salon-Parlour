@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}My Profile{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <h1 class="dashboard-welcome"><i class="fa-solid fa-user"></i> My Profile</h1>
+
+    <div class="row g-4">
+      <div class="col-lg-4">
+        <div class="auth-card shadow-lg">
+          <h5 class="mb-3" style="color:var(--plum);">Edit Profile</h5>
+          <form method="POST">
+            <div class="mb-3">
+              <label class="form-label">Username</label>
+              <input type="text" name="username" class="form-control" value="{{ user.username }}" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" value="{{ user.email }}" disabled>
+              <small class="text-muted">Email can't be changed here.</small>
+            </div>
+            <button type="submit" class="btn btn-gold w-100 rounded-pill py-2">Save Changes</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="col-lg-8">
+        <h5 class="mb-3" style="color:var(--plum);">My Bookings</h5>
+        {% if bookings %}
+        <div class="row g-3">
+          {% for b in bookings %}
+          <div class="col-md-6">
+            <div class="booking-card h-100">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <strong>{{ b.booking_code }}</strong>
+                <span class="status-badge status-{{ b.status|lower }}">{{ b.status }}</span>
+              </div>
+              <p class="mb-1"><i class="fa-solid fa-spa"></i> {{ b.services }}</p>
+              <p class="mb-1"><i class="fa-solid fa-calendar"></i> {{ b.date }} &nbsp; <i class="fa-solid fa-clock"></i> {{ b.time }}</p>
+              <p class="mb-2"><i class="fa-solid fa-chair"></i> Seat {{ b.seat }}</p>
+              <a href="{{ url_for('invoice', booking_code=b.booking_code) }}" class="btn btn-plum btn-sm rounded-pill">View Invoice</a>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted">No bookings yet.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

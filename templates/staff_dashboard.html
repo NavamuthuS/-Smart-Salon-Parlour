@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Staff Dashboard{% endblock %}
+{% block content %}
+<section class="dashboard-section">
+  <div class="container">
+    <h1 class="dashboard-welcome"><i class="fa-solid fa-list-check"></i> Bookings for {{ username }}</h1>
+    <p class="text-muted mb-4">Manage your customer bookings below.</p>
+
+    <div class="filter-bar mb-4">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Search Customer</label>
+          <input type="text" id="filterCustomer" class="form-control form-control-sm" placeholder="Customer name...">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Filter by Date</label>
+          <input type="date" id="filterDate" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Filter by Status</label>
+          <select id="filterStatus" class="form-select form-select-sm">
+            <option value="">All</option>
+            <option value="Pending">Pending</option>
+            <option value="Completed">Completed</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {% if bookings %}
+    <div class="row g-4" id="bookingsList">
+      {% for b in bookings %}
+      <div class="col-md-6 col-lg-4 booking-item"
+           data-customer="{{ b['customer_name']|lower }}"
+           data-date="{{ b['date'] }}"
+           data-status="{{ b['status'] }}">
+        <div class="booking-card h-100">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <h5 class="mb-0"><i class="fa-solid fa-user"></i> {{ b['customer_name'] }}</h5>
+            <span class="status-badge status-{{ b['status']|lower }}">{{ b['status'] }}</span>
+          </div>
+          {% if b['booking_code'] %}<p class="mb-1 small text-muted">{{ b['booking_code'] }}</p>{% endif %}
+          <p class="mb-1"><i class="fa-solid fa-spa"></i> {{ b['services'] }}</p>
+          <p class="mb-1"><i class="fa-solid fa-calendar"></i> {{ b['date'] }} &nbsp; <i class="fa-solid fa-clock"></i> {{ b['time'] }}</p>
+          <p class="mb-2"><i class="fa-solid fa-chair"></i> Seat {{ b['seat'] }}</p>
+
+          {% if b['image'] %}
+          <img src="{{ url_for('static', filename='uploads/' ~ b['image']) }}" class="booking-img mb-2" alt="Reference image">
+          {% endif %}
+
+          <form method="POST" action="{{ url_for('update_status', booking_id=b['id']) }}" class="d-flex gap-2 mt-2">
+            <select name="status" class="form-select form-select-sm">
+              <option value="Pending" {% if b['status']=='Pending' %}selected{% endif %}>Pending</option>
+              <option value="Completed" {% if b['status']=='Completed' %}selected{% endif %}>Completed</option>
+            </select>
+            <button type="submit" class="btn btn-plum btn-sm">Update</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="text-center text-muted mt-3 d-none" id="noResultsMsg">No bookings match your filters.</p>
+    {% else %}
+    <p class="text-center text-muted">No bookings yet.</p>
+    {% endif %}
+  </div>
+</section>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var customerInput = document.getElementById("filterCustomer");
+    var dateInput = document.getElementById("filterDate");
+    var statusSelect = document.getElementById("filterStatus");
+    var items = document.querySelectorAll(".booking-item");
+    var noResults = document.getElementById("noResultsMsg");
+
+    function applyFilters() {
+      var customerVal = (customerInput.value || "").toLowerCase();
+      var dateVal = dateInput.value || "";
+      var statusVal = statusSelect.value || "";
+      var visibleCount = 0;
+
+      items.forEach(function (item) {
+        var matchesCustomer = item.dataset.customer.includes(customerVal);
+        var matchesDate = !dateVal || item.dataset.date === dateVal;
+        var matchesStatus = !statusVal || item.dataset.status === statusVal;
+        var show = matchesCustomer && matchesDate && matchesStatus;
+        item.style.display = show ? "" : "none";
+        if (show) visibleCount++;
+      });
+
+      if (noResults) noResults.classList.toggle("d-none", visibleCount !== 0);
+    }
+
+    if (customerInput) customerInput.addEventListener("input", applyFilters);
+    if (dateInput) dateInput.addEventListener("change", applyFilters);
+    if (statusSelect) statusSelect.addEventListener("change", applyFilters);
+  });
+</script>
+{% endblock %}
