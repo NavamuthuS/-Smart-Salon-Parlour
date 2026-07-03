@@ -1,108 +1,101 @@
-# Smart Salon & Parlour (Firebase Edition)
+# Smart Salon & Parlour (SQLite Edition)
 
 Full-stack Flask app using:
-- **Firestore** — database (users, bookings, reviews)
-- **Firebase Authentication** — login / register
-- **Local folder (`static/uploads`)** — booking reference image uploads (free, no Blaze plan needed)
+- **SQLite** — database (`salon.db`, created automatically, no setup needed)
+- **Custom auth** — Werkzeug password hashing, no external service
+- **Local folder (`static/uploads`)** — booking reference image uploads
 - **EmailJS** — emails the chosen staff member the moment a booking is confirmed
+  (runs in the browser, needs internet on the visitor's device)
+- **fpdf2** — downloadable invoice as PDF
 
-## 1. Firebase setup
+This version needs **no external API** for login/booking/database, so it runs
+on fully free hosts (like PythonAnywhere's free tier) without any restrictions.
 
-1. Go to https://console.firebase.google.com → create a project.
-2. **Authentication** → Sign-in method → enable **Email/Password**.
-3. **Firestore Database** → Create database (start in test mode is fine for development).
-4. **Project settings (gear icon) → General** → scroll to "Your apps" → note your **Web API Key**.
-5. **Project settings → Service accounts** → Generate new private key → downloads a `serviceAccountKey.json` file.
-   - Put that file directly inside the `smart_salon` folder (same level as `app.py`).
-
-Open `app.py` and fill in the top config section:
-
-```python
-FIREBASE_WEB_API_KEY = "PASTE_YOUR_FIREBASE_WEB_API_KEY_HERE"
-```
-
-(`FIREBASE_SERVICE_ACCOUNT_KEY` already points at `serviceAccountKey.json` in the project folder — no edit needed if you placed the file there.)
-
-> Note: Firebase Storage now requires the paid Blaze plan, so this app keeps
-> booking reference images on the local `static/uploads` folder instead —
-> everything else (database + auth) stays on the free Spark plan.
-
-## 2. EmailJS setup (staff booking notification)
+## 1. EmailJS setup (staff booking notification)
 
 1. Create a free account at https://www.emailjs.com
 2. **Email Services** → Add a service (e.g. connect your Gmail) → copy the **Service ID**.
 3. **Email Templates** → Create a template using these variables in the body:
    `{{staff_name}}`, `{{staff_email}}`, `{{customer_name}}`, `{{services}}`, `{{date}}`, `{{time}}`, `{{seat}}`
-   → set the "To email" field of the template to `{{staff_email}}` → copy the **Template ID**.
+   → set "To email" to `{{staff_email}}` → copy the **Template ID**.
 4. **Account → General** → copy your **Public Key**.
 
 Open `static/js/config.js` and fill in:
-
 ```js
 const EMAILJS_PUBLIC_KEY = "...";
 const EMAILJS_SERVICE_ID = "...";
 const EMAILJS_TEMPLATE_ID = "...";
 ```
 
-That's it — no server-side email credentials needed. As soon as a customer confirms
-a booking, the browser calls EmailJS directly and the selected staff member
-(staff1–staff4) gets an email with the customer's name, services, date, time and seat.
-
-## 3. Run in VS Code
+## 2. Run locally (VS Code)
 
 ```
 pip install -r requirements.txt
 python app.py
 ```
-
 Open http://127.0.0.1:5000
 
-## 4. Run in Pydroid 3 (Android)
+## 3. Run in Pydroid 3 (Android)
 
-1. Copy the whole `smart_salon` folder (including `serviceAccountKey.json`) onto your phone.
-2. Pydroid 3 → Pip → install `flask`, `firebase-admin`, `requests`.
+1. Copy the whole `smart_salon` folder onto your phone.
+2. Pydroid 3 → Pip → install `flask`, `fpdf2`.
 3. Open `app.py` → Run.
 4. Open the browser at `http://127.0.0.1:5000`.
 
-(Internet connection is required since Firestore/Auth are cloud services.)
+## 4. Deploy for free, 24/7, no card — PythonAnywhere
+
+1. Go to https://www.pythonanywhere.com → **Create a Beginner account** (free, no card).
+2. Once logged in, go to **Files** tab → upload your project folder
+   (or use **Consoles → Bash** and `git clone` your GitHub repo).
+3. Go to **Web** tab → **Add a new web app** → choose **Flask** → Python 3.10.
+4. Set the source code path to your project folder, and edit the generated
+   `WSGI configuration file` so it points to your `app.py`'s `app` object:
+   ```python
+   import sys
+   path = '/home/yourusername/smart_salon'
+   if path not in sys.path:
+       sys.path.append(path)
+   from app import app as application
+   ```
+5. Go to **Consoles → Bash** and run:
+   ```
+   pip install --user -r /home/yourusername/smart_salon/requirements.txt
+   ```
+6. Go back to the **Web** tab → click **Reload**.
+7. Your app is live at `https://yourusername.pythonanywhere.com` — 24/7, free,
+   no sleep mode, no card required.
 
 ## Default logins
 
-| Role     | Email                       | Password |
-|----------|------------------------------|----------|
-| Admin    | navamuthu2007@gmail.com      | 12345678 |
-| Staff 1  | staff1@gmail.com             | 12345678 |
-| Staff 2  | staff2@gmail.com             | 12345678 |
-| Staff 3  | staff3@gmail.com             | 12345678 |
-| Staff 4  | staff4@gmail.com             | 12345678 |
-| Customer | (register your own account) | —        |
+| Role     | Email                       | Password    |
+|----------|------------------------------|-------------|
+| Admin    | navamuthu2007@gmail.com      | Salon@123   |
+| Staff 1  | staff1@gmail.com             | Salon@123   |
+| Staff 2  | staff2@gmail.com             | Salon@123   |
+| Staff 3  | staff3@gmail.com             | Salon@123   |
+| Staff 4  | staff4@gmail.com             | Salon@123   |
+| Customer | (register your own account) | —           |
 
-These are auto-created in Firebase Auth + Firestore the first time `app.py` runs
-(`seed_default_users()`).
+These are auto-created in `salon.db` the first time the app runs.
 
-## 5. Deploy to the internet (Render.com — free)
+## Password rules (register / forgot password)
 
-1. Push this whole folder to a **GitHub repository** (private is fine).
-   `.gitignore` already excludes `serviceAccountKey.json` and other secrets —
-   never commit that file.
-2. Go to https://render.com → sign up with GitHub → **New + → Web Service**.
-3. Connect your repository. Fill in:
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `gunicorn app:app` (already set via the `Procfile`)
-4. Under **Environment**, add these variables:
-   - `FIREBASE_SERVICE_ACCOUNT_JSON` → paste the **entire contents** of your
-     `serviceAccountKey.json` file (open it in a text editor, copy everything).
-   - `FIREBASE_WEB_API_KEY` → your Firebase Web API Key.
-   - `FLASK_SECRET_KEY` → any random long string (e.g. `super-secret-2026-xyz`).
-5. Click **Create Web Service**. In 2-3 minutes you'll get a live link like:
-   `https://smart-salon-parlour.onrender.com`
+Every password must have: at least 6 characters, one uppercase letter, one
+lowercase letter, one number, and one special symbol (e.g. `Salon@123`).
 
-Note: Render's free tier "sleeps" after 15 minutes of no traffic and takes
-~30 seconds to wake up on the next visit — normal for the free plan.
+## Forgot Password
+
+Since there's no external email service on the backend, "Forgot Password"
+lets someone who knows the registered email set a new password directly
+(matches the original "no real email sending" requirement). For a real
+production launch where security matters more, consider adding an OTP or
+email-verification step before allowing the reset.
 
 ## Notes
 
-- Booking reference images are stored in `static/uploads/` (created automatically) —
-  this stays on Firebase's free Spark plan since Storage isn't used.
-- Role is still detected automatically at registration: the admin email and the
+- Booking IDs are generated automatically as `SSP-0001`, `SSP-0002`, etc.
+- Prices for invoices/totals use a fixed value per service (the midpoint of
+  each displayed price range) — edit the `SERVICES` dictionary in `app.py`
+  to change prices.
+- Role is detected automatically at registration: the admin email and the
   4 staff emails are hard-coded; everyone else becomes a `customer`.

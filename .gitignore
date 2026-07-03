@@ -1,4 +1,4 @@
-serviceAccountKey.json
+salon.db
 .venv/
 venv/
 __pycache__/
@@ -7,4 +7,3 @@ static/uploads/*
 !static/uploads/.gitkeep
 static/invoices/*
 !static/invoices/.gitkeep
-.env

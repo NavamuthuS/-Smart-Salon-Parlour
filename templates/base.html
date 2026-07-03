@@ -42,7 +42,7 @@
             <i class="fa-solid fa-moon"></i>
           </button>
         </li>
-        {% if session.get('uid') %}
+        {% if session.get('user_id') %}
           <li class="nav-item">
             <span class="nav-link user-chip">
               <i class="fa-solid fa-user-circle"></i> {{ session.get('username') }}

@@ -1,44 +1,38 @@
 """
-Smart Salon & Parlour - Full Stack Flask + Firebase Application
+Smart Salon & Parlour - Full Stack Flask + SQLite Application
 ------------------------------------------------------------------
-Database : Firebase Firestore
-Auth     : Firebase Authentication (Admin SDK for register, REST API for login
-           and password reset)
-Images   : Local folder static/uploads (Firebase Storage needs the paid Blaze
-           plan, so this stays on the free Spark plan)
+Database : SQLite (salon.db, created automatically)
+Auth     : Custom (Werkzeug password hashing) — no external service needed
+Images   : Local folder static/uploads
 Email    : EmailJS (browser-side) notifies staff when a customer books them
 PDF      : fpdf2 generates a downloadable invoice
 
-SETUP REQUIRED BEFORE RUNNING (fill these in below):
-  1. FIREBASE_SERVICE_ACCOUNT_KEY -> path to your serviceAccountKey.json
-  2. FIREBASE_WEB_API_KEY -> Firebase Console -> Project settings -> General
-     (or Google Cloud Console -> APIs & Services -> Credentials -> Browser key)
-  3. EmailJS keys go in static/js/config.js
+Works fully offline-friendly on free hosts like PythonAnywhere (no external
+API calls required for login/database — only the browser needs internet for
+the EmailJS notification).
 
 Run with:  python app.py
 Then open: http://127.0.0.1:5000
 """
 
 import os
-import json
 import re
-import requests
+import sqlite3
 from datetime import datetime, date
 
 from flask import (
     Flask, render_template, request, redirect, url_for,
     session, flash, send_file, abort
 )
+from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from fpdf import FPDF
-
-import firebase_admin
-from firebase_admin import credentials, firestore, auth
 
 # ----------------------------------------------------------------------
 # APP CONFIG
 # ----------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "salon.db")
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 INVOICE_FOLDER = os.path.join(BASE_DIR, "static", "invoices")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -50,39 +44,16 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(INVOICE_FOLDER, exist_ok=True)
 
 # ----------------------------------------------------------------------
-# FIREBASE CONFIG
-# ----------------------------------------------------------------------
-# Local development: put serviceAccountKey.json in this folder (used automatically).
-# Deployment (Render/Railway/etc.): set these as environment variables instead —
-#   FIREBASE_SERVICE_ACCOUNT_JSON = the *entire contents* of serviceAccountKey.json
-#   FIREBASE_WEB_API_KEY          = your Firebase Web API Key
-FIREBASE_SERVICE_ACCOUNT_KEY_PATH = os.path.join(BASE_DIR, "serviceAccountKey.json")
-FIREBASE_WEB_API_KEY = os.environ.get("FIREBASE_WEB_API_KEY", "PASTE_YOUR_FIREBASE_WEB_API_KEY_HERE")
-
-service_account_json_env = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
-if service_account_json_env:
-    cred = credentials.Certificate(json.loads(service_account_json_env))
-else:
-    cred = credentials.Certificate(FIREBASE_SERVICE_ACCOUNT_KEY_PATH)
-
-firebase_admin.initialize_app(cred)
-db = firestore.client()
-
-IDENTITY_TOOLKIT_BASE = "https://identitytoolkit.googleapis.com/v1/accounts"
-SIGNIN_URL = f"{IDENTITY_TOOLKIT_BASE}:signInWithPassword?key={FIREBASE_WEB_API_KEY}"
-RESET_PASSWORD_URL = f"{IDENTITY_TOOLKIT_BASE}:sendOobCode?key={FIREBASE_WEB_API_KEY}"
-
-# ----------------------------------------------------------------------
 # DEFAULT USERS
 # ----------------------------------------------------------------------
 ADMIN_EMAIL = "navamuthu2007@gmail.com"
 STAFF_ACCOUNTS = [
-    ("staff1", "staff1@gmail.com"),
-    ("staff2", "staff2@gmail.com"),
+    ("staff1", "navamuthu2507@gmail.com"),
+    ("staff2", "navamuthu2225@gmail.com"),
     ("staff3", "staff3@gmail.com"),
     ("staff4", "staff4@gmail.com"),
 ]
-DEFAULT_PASSWORD = "12345678"
+DEFAULT_PASSWORD = "Salon@123"
 
 # ----------------------------------------------------------------------
 # SERVICES CATALOG  (name, display price range, exact price used for totals)
@@ -120,38 +91,104 @@ STAFF_NAMES = ["staff1", "staff2", "staff3", "staff4"]
 
 
 # ----------------------------------------------------------------------
-# FIREBASE / FIRESTORE HELPERS
+# DATABASE HELPERS
 # ----------------------------------------------------------------------
-def staff_email_by_name(name):
-    for n, e in STAFF_ACCOUNTS:
-        if n == name:
-            return e
-    return None
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 
-def seed_default_users():
-    defaults = [("Admin", ADMIN_EMAIL, "admin")] + [
-        (name, email, "staff") for name, email in STAFF_ACCOUNTS
-    ]
-    for username, email, role in defaults:
-        try:
-            user = auth.get_user_by_email(email)
-        except auth.UserNotFoundError:
-            user = auth.create_user(email=email, password=DEFAULT_PASSWORD, display_name=username)
+def init_db():
+    conn = get_db()
+    cur = conn.cursor()
 
-        profile_ref = db.collection("users").document(user.uid)
-        if not profile_ref.get().exists:
-            profile_ref.set({"username": username, "email": email, "role": role})
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            booking_code TEXT UNIQUE,
+            user_id INTEGER NOT NULL,
+            customer_name TEXT NOT NULL,
+            services TEXT NOT NULL,
+            total_price INTEGER DEFAULT 0,
+            staff_name TEXT NOT NULL,
+            staff_email TEXT,
+            date TEXT NOT NULL,
+            time TEXT NOT NULL,
+            seat INTEGER NOT NULL,
+            image TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            created_at TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS booking_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            booking_id INTEGER NOT NULL,
+            service_name TEXT NOT NULL,
+            price INTEGER NOT NULL,
+            FOREIGN KEY (booking_id) REFERENCES bookings(id)
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            customer_name TEXT NOT NULL,
+            staff_name TEXT NOT NULL,
+            rating INTEGER NOT NULL,
+            feedback TEXT,
+            created_at TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
+    conn.commit()
+
+    # Seed admin
+    cur.execute("SELECT id FROM users WHERE email = ?", (ADMIN_EMAIL,))
+    if not cur.fetchone():
+        cur.execute(
+            "INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)",
+            ("Admin", ADMIN_EMAIL, generate_password_hash(DEFAULT_PASSWORD), "admin"),
+        )
+
+    # Seed staff
+    for name, email in STAFF_ACCOUNTS:
+        cur.execute("SELECT id FROM users WHERE email = ?", (email,))
+        if not cur.fetchone():
+            cur.execute(
+                "INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)",
+                (name, email, generate_password_hash(DEFAULT_PASSWORD), "staff"),
+            )
+
+    conn.commit()
+    conn.close()
 
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def save_image_locally(file, uid):
-    filename = secure_filename(f"{uid}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
-    file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
-    return filename
+def staff_email_by_name(name):
+    for n, e in STAFF_ACCOUNTS:
+        if n == name:
+            return e
+    return None
 
 
 def is_strong_password(password):
@@ -169,39 +206,16 @@ def is_strong_password(password):
     return True
 
 
-def doc_to_dict(doc):
-    data = doc.to_dict()
-    data["id"] = doc.id
-    return data
-
-
-def next_booking_code():
-    """Atomically increments a Firestore counter and returns a code like SSP-0001."""
-    counter_ref = db.collection("counters").document("bookings")
-
-    @firestore.transactional
-    def _increment(transaction):
-        snapshot = counter_ref.get(transaction=transaction)
-        current = snapshot.get("count") if snapshot.exists else 0
-        new_count = (current or 0) + 1
-        transaction.set(counter_ref, {"count": new_count})
-        return new_count
-
-    transaction = db.transaction()
-    count = _increment(transaction)
-    return f"SSP-{count:04d}"
-
-
 # ----------------------------------------------------------------------
 # AUTH HELPERS
 # ----------------------------------------------------------------------
 def current_user():
-    if "uid" not in session:
+    if "user_id" not in session:
         return None
-    doc = db.collection("users").document(session["uid"]).get()
-    if not doc.exists:
-        return None
-    return doc_to_dict(doc)
+    conn = get_db()
+    user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+    conn.close()
+    return user
 
 
 def login_required(role=None):
@@ -229,10 +243,17 @@ def login_required(role=None):
 # ----------------------------------------------------------------------
 @app.route("/")
 def index():
-    reviews = [doc_to_dict(d) for d in db.collection("reviews").stream()]
-    total_reviews = len(reviews)
-    avg_rating = round(sum(r["rating"] for r in reviews) / total_reviews, 1) if total_reviews else 0
-    recent_reviews = sorted(reviews, key=lambda r: r.get("created_at", ""), reverse=True)[:5]
+    conn = get_db()
+    reviews = conn.execute(
+        "SELECT AVG(rating) as avg_rating, COUNT(*) as total FROM reviews"
+    ).fetchone()
+    recent_reviews = conn.execute(
+        "SELECT * FROM reviews ORDER BY id DESC LIMIT 5"
+    ).fetchall()
+    conn.close()
+
+    avg_rating = round(reviews["avg_rating"], 1) if reviews["avg_rating"] else 0
+    total_reviews = reviews["total"] or 0
 
     return render_template(
         "index.html",
@@ -261,12 +282,12 @@ def register():
             )
             return redirect(url_for("register"))
 
-        try:
-            auth.get_user_by_email(email)
+        conn = get_db()
+        existing = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if existing:
+            conn.close()
             flash("An account with this email already exists. Please login.", "danger")
             return redirect(url_for("login"))
-        except auth.UserNotFoundError:
-            pass
 
         if email == ADMIN_EMAIL:
             role = "admin"
@@ -275,15 +296,12 @@ def register():
         else:
             role = "customer"
 
-        try:
-            user = auth.create_user(email=email, password=password, display_name=username)
-        except Exception as e:
-            flash(f"Registration failed: {e}", "danger")
-            return redirect(url_for("register"))
-
-        db.collection("users").document(user.uid).set(
-            {"username": username, "email": email, "role": role}
+        conn.execute(
+            "INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, ?)",
+            (username, email, generate_password_hash(password), role),
         )
+        conn.commit()
+        conn.close()
 
         flash("Registration successful! Please login.", "success")
         return redirect(url_for("login"))
@@ -297,38 +315,25 @@ def login():
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
 
-        try:
-            resp = requests.post(
-                SIGNIN_URL,
-                json={"email": email, "password": password, "returnSecureToken": True},
-                timeout=10,
-            )
-            data = resp.json()
-            if resp.status_code != 200:
-                flash("Invalid email or password.", "danger")
-                return redirect(url_for("login"))
-            uid = data["localId"]
-        except requests.exceptions.RequestException:
-            flash("Could not reach Firebase. Check your internet connection.", "danger")
-            return redirect(url_for("login"))
+        conn = get_db()
+        user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        conn.close()
 
-        profile_doc = db.collection("users").document(uid).get()
-        if not profile_doc.exists:
-            flash("No profile found for this account.", "danger")
-            return redirect(url_for("login"))
+        if user and check_password_hash(user["password"], password):
+            session["user_id"] = user["id"]
+            session["username"] = user["username"]
+            session["role"] = user["role"]
+            flash(f"Welcome back, {user['username']}!", "success")
 
-        profile = profile_doc.to_dict()
-        session["uid"] = uid
-        session["username"] = profile["username"]
-        session["role"] = profile["role"]
-        flash(f"Welcome back, {profile['username']}!", "success")
-
-        if profile["role"] == "admin":
-            return redirect(url_for("admin_dashboard"))
-        elif profile["role"] == "staff":
-            return redirect(url_for("staff_dashboard"))
+            if user["role"] == "admin":
+                return redirect(url_for("admin_dashboard"))
+            elif user["role"] == "staff":
+                return redirect(url_for("staff_dashboard"))
+            else:
+                return redirect(url_for("customer_dashboard"))
         else:
-            return redirect(url_for("customer_dashboard"))
+            flash("Invalid email or password.", "danger")
+            return redirect(url_for("login"))
 
     return render_template("login.html")
 
@@ -337,21 +342,28 @@ def login():
 def forgot_password():
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
+        new_password = request.form.get("new_password", "")
 
-        try:
-            auth.get_user_by_email(email)
-            # Ask Firebase itself to email a reset link — no SMTP setup needed.
-            requests.post(
-                RESET_PASSWORD_URL,
-                json={"requestType": "PASSWORD_RESET", "email": email},
-                timeout=10,
+        if not is_strong_password(new_password):
+            flash(
+                "New password must be at least 6 characters and include an uppercase letter, "
+                "a lowercase letter, a number, and a special symbol.",
+                "danger",
             )
-        except auth.UserNotFoundError:
-            pass  # Don't reveal whether the email exists
-        except requests.exceptions.RequestException:
-            pass
+            return redirect(url_for("forgot_password"))
 
-        flash("If that email is registered, a password reset link has been sent.", "info")
+        conn = get_db()
+        user = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if user:
+            conn.execute(
+                "UPDATE users SET password = ? WHERE id = ?",
+                (generate_password_hash(new_password), user["id"]),
+            )
+            conn.commit()
+        conn.close()
+
+        # Don't reveal whether the email existed — same message either way
+        flash("If that email is registered, your password has been updated. Please login.", "info")
         return redirect(url_for("login"))
 
     return render_template("forgot_password.html")
@@ -388,20 +400,17 @@ def booking():
             flash("Please fill all required fields and select at least one service.", "danger")
             return redirect(url_for("booking"))
 
-        clash = (
-            db.collection("bookings")
-            .where("date", "==", date_)
-            .where("time", "==", time_)
-            .where("seat", "==", seat)
-            .limit(1)
-            .get()
-        )
-        if len(clash) > 0:
+        conn = get_db()
+
+        clash = conn.execute(
+            "SELECT id FROM bookings WHERE date = ? AND time = ? AND seat = ?",
+            (date_, time_, seat),
+        ).fetchone()
+        if clash:
+            conn.close()
             flash("This seat is already booked for the selected date & time. Please choose another slot.", "danger")
             return redirect(url_for("booking"))
 
-        # Build service breakdown + total price from the catalog (never trust
-        # a price sent from the browser).
         price_lookup = {}
         for items in SERVICES.values():
             for name, _range, price in items:
@@ -410,39 +419,45 @@ def booking():
         service_items = []
         total_price = 0
         for raw in services_selected:
-            name = raw.split(" (")[0]  # value format: "Hair cutting (₹100-200)"
+            name = raw.split(" (")[0]
             price = price_lookup.get(name, 0)
-            service_items.append({"name": name, "price": price})
+            service_items.append((name, price))
             total_price += price
 
         image_filename = None
         file = request.files.get("image")
         if file and file.filename and allowed_file(file.filename):
-            image_filename = save_image_locally(file, session["uid"])
+            image_filename = secure_filename(
+                f"{session['user_id']}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}"
+            )
+            file.save(os.path.join(app.config["UPLOAD_FOLDER"], image_filename))
 
-        booking_code = next_booking_code()
+        services_str = ", ".join(name for name, _price in service_items)
         staff_email = staff_email_by_name(staff_name)
         created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
-        services_str = ", ".join(s["name"] for s in service_items)
 
-        db.collection("bookings").add(
-            {
-                "booking_code": booking_code,
-                "user_id": session["uid"],
-                "customer_name": session["username"],
-                "services": services_str,
-                "service_items": service_items,
-                "total_price": total_price,
-                "staff_name": staff_name,
-                "staff_email": staff_email,
-                "date": date_,
-                "time": time_,
-                "seat": seat,
-                "image": image_filename,
-                "status": "Pending",
-                "created_at": created_at,
-            }
+        cur = conn.execute(
+            """INSERT INTO bookings
+               (user_id, customer_name, services, total_price, staff_name, staff_email,
+                date, time, seat, image, status, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                session["user_id"], session["username"], services_str, total_price,
+                staff_name, staff_email, date_, time_, seat, image_filename, "Pending", created_at,
+            ),
         )
+        booking_id = cur.lastrowid
+        booking_code = f"SSP-{booking_id:04d}"
+        conn.execute("UPDATE bookings SET booking_code = ? WHERE id = ?", (booking_code, booking_id))
+
+        for name, price in service_items:
+            conn.execute(
+                "INSERT INTO booking_items (booking_id, service_name, price) VALUES (?, ?, ?)",
+                (booking_id, name, price),
+            )
+
+        conn.commit()
+        conn.close()
 
         session["last_booking"] = {
             "staff_name": staff_name,
@@ -461,16 +476,30 @@ def booking():
     return render_template("booking.html", services=SERVICES, staff_names=STAFF_NAMES)
 
 
+def _get_booking_with_items(booking_code):
+    conn = get_db()
+    b = conn.execute("SELECT * FROM bookings WHERE booking_code = ?", (booking_code,)).fetchone()
+    if not b:
+        conn.close()
+        return None
+    items = conn.execute(
+        "SELECT service_name as name, price FROM booking_items WHERE booking_id = ?", (b["id"],)
+    ).fetchall()
+    conn.close()
+    b = dict(b)
+    b["service_items"] = [dict(i) for i in items]
+    return b
+
+
 @app.route("/customer/invoice/<booking_code>")
 @login_required()
 def invoice(booking_code):
-    docs = db.collection("bookings").where("booking_code", "==", booking_code).limit(1).get()
-    if not docs:
+    b = _get_booking_with_items(booking_code)
+    if not b:
         abort(404)
-    b = doc_to_dict(docs[0])
 
     user = current_user()
-    if user["role"] == "customer" and b["user_id"] != session["uid"]:
+    if user["role"] == "customer" and b["user_id"] != session["user_id"]:
         flash("You are not authorized to view that invoice.", "danger")
         return redirect(url_for("customer_dashboard"))
 
@@ -480,42 +509,41 @@ def invoice(booking_code):
 @app.route("/customer/invoice/<booking_code>/pdf")
 @login_required()
 def invoice_pdf(booking_code):
-    docs = db.collection("bookings").where("booking_code", "==", booking_code).limit(1).get()
-    if not docs:
+    b = _get_booking_with_items(booking_code)
+    if not b:
         abort(404)
-    b = doc_to_dict(docs[0])
 
     user = current_user()
-    if user["role"] == "customer" and b["user_id"] != session["uid"]:
+    if user["role"] == "customer" and b["user_id"] != session["user_id"]:
         abort(403)
 
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 18)
-    pdf.cell(0, 12, "Smart Salon & Parlour", ln=True, align="C")
+    pdf.cell(0, 12, "Smart Salon & Parlour", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 8, "Invoice", ln=True, align="C")
+    pdf.cell(0, 8, "Invoice", new_x="LMARGIN", new_y="NEXT", align="C")
     pdf.ln(6)
 
     pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 8, f"Booking ID: {b['booking_code']}", ln=True)
-    pdf.cell(0, 8, f"Customer: {b['customer_name']}", ln=True)
-    pdf.cell(0, 8, f"Staff: {b['staff_name']}", ln=True)
-    pdf.cell(0, 8, f"Date: {b['date']}    Time: {b['time']}    Seat: {b['seat']}", ln=True)
+    pdf.cell(0, 8, f"Booking ID: {b['booking_code']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, f"Customer: {b['customer_name']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, f"Staff: {b['staff_name']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, f"Date: {b['date']}    Time: {b['time']}    Seat: {b['seat']}", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(120, 8, "Service", border=1)
-    pdf.cell(60, 8, "Price (Rs.)", border=1, ln=True)
+    pdf.cell(60, 8, "Price (Rs.)", border=1, new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_font("Helvetica", "", 11)
-    for item in b.get("service_items", []):
+    for item in b["service_items"]:
         pdf.cell(120, 8, item["name"], border=1)
-        pdf.cell(60, 8, str(item["price"]), border=1, ln=True)
+        pdf.cell(60, 8, str(item["price"]), border=1, new_x="LMARGIN", new_y="NEXT")
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.cell(120, 10, "Total", border=1)
-    pdf.cell(60, 10, str(b.get("total_price", 0)), border=1, ln=True)
+    pdf.cell(60, 10, str(b["total_price"]), border=1, new_x="LMARGIN", new_y="NEXT")
 
     pdf_path = os.path.join(INVOICE_FOLDER, f"{b['booking_code']}.pdf")
     pdf.output(pdf_path)
@@ -535,16 +563,17 @@ def review():
             flash("Please select a staff member and a rating.", "danger")
             return redirect(url_for("review"))
 
-        db.collection("reviews").add(
-            {
-                "user_id": session["uid"],
-                "customer_name": session["username"],
-                "staff_name": staff_name,
-                "rating": int(rating),
-                "feedback": feedback,
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            }
+        conn = get_db()
+        conn.execute(
+            """INSERT INTO reviews (user_id, customer_name, staff_name, rating, feedback, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (
+                session["user_id"], session["username"], staff_name, int(rating), feedback,
+                datetime.now().strftime("%Y-%m-%d %H:%M"),
+            ),
         )
+        conn.commit()
+        conn.close()
 
         flash("Thank you for your feedback!", "success")
         return redirect(url_for("customer_dashboard"))
@@ -555,20 +584,24 @@ def review():
 @app.route("/customer/profile", methods=["GET", "POST"])
 @login_required(role="customer")
 def profile():
-    uid = session["uid"]
+    uid = session["user_id"]
+    conn = get_db()
 
     if request.method == "POST":
         new_username = request.form.get("username", "").strip()
         if new_username:
-            db.collection("users").document(uid).update({"username": new_username})
+            conn.execute("UPDATE users SET username = ? WHERE id = ?", (new_username, uid))
+            conn.commit()
             session["username"] = new_username
             flash("Profile updated.", "success")
+        conn.close()
         return redirect(url_for("profile"))
 
-    user = current_user()
-    docs = db.collection("bookings").where("user_id", "==", uid).stream()
-    bookings = [doc_to_dict(d) for d in docs]
-    bookings.sort(key=lambda b: b.get("created_at", ""), reverse=True)
+    user = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+    bookings = conn.execute(
+        "SELECT * FROM bookings WHERE user_id = ? ORDER BY id DESC", (uid,)
+    ).fetchall()
+    conn.close()
 
     return render_template("profile.html", user=user, bookings=bookings)
 
@@ -579,18 +612,23 @@ def profile():
 @app.route("/staff/dashboard")
 @login_required(role="staff")
 def staff_dashboard():
-    docs = db.collection("bookings").where("staff_name", "==", session["username"]).stream()
-    bookings = [doc_to_dict(d) for d in docs]
-    bookings.sort(key=lambda b: b.get("created_at", ""), reverse=True)
-
+    conn = get_db()
+    bookings = conn.execute(
+        "SELECT * FROM bookings WHERE staff_name = ? ORDER BY id DESC",
+        (session["username"],),
+    ).fetchall()
+    conn.close()
     return render_template("staff_dashboard.html", bookings=bookings, username=session["username"])
 
 
-@app.route("/staff/update_status/<booking_id>", methods=["POST"])
+@app.route("/staff/update_status/<int:booking_id>", methods=["POST"])
 @login_required(role="staff")
 def update_status(booking_id):
     new_status = request.form.get("status")
-    db.collection("bookings").document(booking_id).update({"status": new_status})
+    conn = get_db()
+    conn.execute("UPDATE bookings SET status = ? WHERE id = ?", (new_status, booking_id))
+    conn.commit()
+    conn.close()
     flash("Booking status updated.", "success")
     return redirect(url_for("staff_dashboard"))
 
@@ -601,28 +639,26 @@ def update_status(booking_id):
 @app.route("/admin/dashboard")
 @login_required(role="admin")
 def admin_dashboard():
-    all_bookings = [doc_to_dict(d) for d in db.collection("bookings").stream()]
-    total_bookings = len(all_bookings)
+    conn = get_db()
+    total_bookings = conn.execute("SELECT COUNT(*) as c FROM bookings").fetchone()["c"]
+    total_customers = conn.execute(
+        "SELECT COUNT(*) as c FROM users WHERE role = 'customer'"
+    ).fetchone()["c"]
+    recent_bookings = conn.execute("SELECT * FROM bookings ORDER BY id DESC LIMIT 10").fetchall()
 
-    total_customers = len(list(db.collection("users").where("role", "==", "customer").stream()))
+    per_day = conn.execute(
+        "SELECT date, COUNT(*) as c FROM bookings GROUP BY date ORDER BY date DESC LIMIT 7"
+    ).fetchall()
+    chart_labels = [row["date"] for row in reversed(per_day)]
+    chart_values = [row["c"] for row in reversed(per_day)]
 
-    all_bookings.sort(key=lambda b: b.get("created_at", ""), reverse=True)
-    recent_bookings = all_bookings[:10]
-
-    # ---- Analytics: bookings per day (last 7 days) ----
-    per_day_counts = {}
-    for b in all_bookings:
-        d = b.get("date", "")
-        if d:
-            per_day_counts[d] = per_day_counts.get(d, 0) + 1
-    chart_labels = sorted(per_day_counts.keys())[-7:]
-    chart_values = [per_day_counts[d] for d in chart_labels]
-
-    # ---- Analytics: revenue this month ----
     this_month = date.today().strftime("%Y-%m")
-    revenue_this_month = sum(
-        b.get("total_price", 0) for b in all_bookings if b.get("date", "").startswith(this_month)
-    )
+    revenue_row = conn.execute(
+        "SELECT SUM(total_price) as total FROM bookings WHERE date LIKE ?", (f"{this_month}%",)
+    ).fetchone()
+    revenue_this_month = revenue_row["total"] or 0
+
+    conn.close()
 
     return render_template(
         "admin_dashboard.html",
@@ -638,15 +674,17 @@ def admin_dashboard():
 @app.route("/admin/reviews")
 @login_required(role="admin")
 def reviews_page():
-    reviews = [doc_to_dict(d) for d in db.collection("reviews").stream()]
-    reviews.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+    conn = get_db()
+    reviews = conn.execute("SELECT * FROM reviews ORDER BY id DESC").fetchall()
+    conn.close()
     return render_template("reviews.html", reviews=reviews)
 
 
 # ----------------------------------------------------------------------
 # MAIN
 # ----------------------------------------------------------------------
+init_db()  # runs on import too, so it works under any WSGI server (e.g. PythonAnywhere)
+
 if __name__ == "__main__":
-    seed_default_users()
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=True, host="0.0.0.0", port=port)
